@@ -1,0 +1,5 @@
+# Planning scaffold. Write compose.yaml yourself.
+# TODO services -> iris
+# TODO image from required IMAGE_REF in release.env, no local build
+# TODO loopback host port HOST_PORT default 5000 -> container port 5000
+# TODO restart policy unless-stopped

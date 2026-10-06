@@ -1,0 +1,7 @@
+# Planning scaffold. Write scripts/smoke.py yourself.
+# Use json, sys, time, urllib.request and urllib.error from the standard library.
+# TODO optional base URL, bounded readiness retry and request timeout
+# TODO check GET / -> 200 and service == iris-prediction
+# TODO check POST /predict with four numbers -> 200 and prediction == setosa
+# TODO check POST /predict with two numbers -> 400 and an error field
+# TODO unexpected results exit nonzero; success prints only after all checks pass

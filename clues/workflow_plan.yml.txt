@@ -1,0 +1,12 @@
+# Planning scaffold only. Write the actual file in .github/workflows.
+name: ML Delivery
+# TODO triggers for main, staging and optional manual runs
+# TODO contents read permission
+jobs:
+  build:
+    # TODO runner, timeout, package write permission and image_ref output
+    # TODO checkout -> lowercase name -> QEMU -> Buildx -> GHCR login -> publish
+  # Practical B: add load_test as a sibling with needs: build
+  # TODO use the exact output digest, smoke, headless load, reports and cleanup
+  # Practical C: add release as a sibling after build and load_test
+  # TODO main-only condition, production environment, release bundle and upload

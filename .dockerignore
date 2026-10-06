@@ -1,0 +1,30 @@
+# Keep the build context small and free of local-only artefacts.
+.git
+.github
+.gitignore
+.dockerignore
+
+# Credentials and local environments must never enter an image layer.
+.venv
+venv
+.env
+.env.*
+release.env
+*.pem
+*.key
+
+# Locust reports and test tooling are not part of the serving image.
+reports
+scripts
+locustfile.py
+compose.yaml
+
+# Cached byte-code and locally trained models: the image trains its own model.
+__pycache__
+*.pyc
+iris_model.joblib
+iris_model.pkl
+
+# Assignment material kept in the repository, not in the image.
+original_project
+clues

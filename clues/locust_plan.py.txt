@@ -1,0 +1,10 @@
+# Planning scaffold. Write locustfile.py yourself.
+from locust import HttpUser, task, between, events
+
+# TODO class IrisUser(HttpUser) with wait_time = between(1, 2)
+# TODO @task(3) prediction using valid measurements and semantic response checks
+# TODO @task(1) home check using the expected service identity
+# TODO use catch_response and timeout to classify failed samples
+# TODO quitting listener: requests >= 20 AND failure ratio <= 0.01
+#      AND a present aggregate p95 <= 1000 ms (optional P95_LIMIT_MS)
+# TODO process exit code 0 when all conditions pass, 1 otherwise

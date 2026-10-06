@@ -1,0 +1,27 @@
+# Credentials and local environments
+.venv/
+venv/
+.env
+.env.*
+release.env
+*.pem
+*.key
+
+# Python byte-code
+__pycache__/
+*.pyc
+
+# Locally trained models: build-time training creates iris_model.joblib in the image.
+iris_model.joblib
+iris_model.pkl
+
+# Load-test output is evidence, regenerated per run; keep it out of the image build.
+reports/
+
+# Approved release bundles are unpacked locally per machine and retained for submission.
+release-A/
+release-B/
+release/
+
+# OS noise
+.DS_Store
