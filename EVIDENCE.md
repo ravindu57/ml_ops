@@ -253,6 +253,27 @@ Ports `127.0.0.1:${HOST_PORT:-5000}:5000`, `restart: unless-stopped`, no `build:
 the staging image is never silently substituted because `release` receives `needs.build.outputs.image_ref`
 from the main-branch run itself.
 
+### Multi-platform leg verified locally
+
+The `linux/arm64` platform that the workflow publishes was built and run on this machine, so a
+publish failure here is not a surprise waiting for CI:
+
+```bash
+docker buildx build --platform linux/arm64 -t iris-local:arm64-check .
+docker image inspect iris-local:arm64-check --format '{{.Os}}/{{.Architecture}} size={{.Size}}'
+# linux/arm64 size=128382377
+docker run -d --name iris-arm64 -p 127.0.0.1:5002:5000 iris-local:arm64-check
+curl http://127.0.0.1:5002/
+# {"service":"iris-prediction","usage":"POST /predict with four measurements (release B)"}
+curl -X POST http://127.0.0.1:5002/predict -H 'Content-Type: application/json' -d '{"measurements":[5.1,3.5,1.4,0.2]}'
+# {"prediction":"setosa"}
+```
+
+`pip` resolves prebuilt `manylinux_2_27_aarch64` wheels for numpy, scipy and scikit-learn, so the
+arm64 leg downloads rather than compiles; under QEMU the container needs roughly 30–60 s before the
+first request is served, which is why `scripts/smoke.py` retries home readiness for 30 attempts
+instead of failing on the first connection refusal.
+
 ### C2 A → B → A deployment (rehearsed locally)
 
 The same commands were run against two digest-pinned images in `release-A/` and `release-B/`,
@@ -322,8 +343,8 @@ This single-container replacement briefly interrupts service; it is not a zero-d
   old container before starting the new one.
 * The GitHub-hosted runner is temporary, so `load_test` is a smoke-and-gate environment, not a
   persistent API. Nothing is deployed by the pipeline to a long-lived host.
-* Multi-platform images publish `linux/arm64`, but the measurement host is `x86_64`, so the arm64
-  leg is verified only as a build artefact, not by running its container here.
+* Multi-platform images publish `linux/arm64`, and that leg was built and served a valid prediction
+  locally (see C2 above). The measurement host itself remains `x86_64`.
 
 ---
 
