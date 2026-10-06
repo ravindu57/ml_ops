@@ -14,6 +14,7 @@ Branch history created locally (push step is listed at the end; nothing has been
 | `4ee87db` | main ← staging | merge "approve release A after load gate" |
 | `96696f3` | staging | `app.py` home usage message marked as release B (only line changed) |
 | `e0e9ca3` | main ← staging | merge "approve release B" |
+| `18d52e2` | main | `EVIDENCE.md` (documentation only; pushing it re-runs the whole pipeline and produces one more digest) |
 
 Verified: `train.py` is byte-identical to `original_project/train.py`; `app.py` differs from the
 original on exactly one line (the `usage` string), and `service` stays `iris-prediction`.
