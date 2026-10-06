@@ -17,6 +17,7 @@ release.env
 reports
 scripts
 locustfile.py
+test_app.py
 compose.yaml
 
 # Cached byte-code and locally trained models: the image trains its own model.
