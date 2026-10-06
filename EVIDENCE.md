@@ -2,19 +2,62 @@
 
 Repo: `https://github.com/ravindu57/ml_ops.git` · image name: `ghcr.io/ravindu57/ml_ops`
 Author for all commits: `ravindu57 <djravinduremix2004@gmail.com>`
+Pushed over SSH (`git@github.com:ravindu57/ml_ops.git`) — branches `main`, `staging`, `release-a` are live.
 
-Branch history created locally (push step is listed at the end; nothing has been pushed yet).
+## GitHub runs — actual results
+
+| Run | Branch | Source SHA | Tag | Digest | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| [#1](https://github.com/ravindu57/ml_ops/actions/runs/37416627392) | main | `e1efeae2507e96265053689f3e579bbcf566fde4` | `sha-e1efeae2507e96265053689f3e579bbcf566fde4` | `sha256:377a2f8aee92c3b28e9d3ca10e6b3fa442a27faf533a6c6d03ca2f7ad2bc6132` | build ✅ · load_test ✅ · release ✅ → artifact `approved-release-e1efeae2507e96265053689f3e579bbcf566fde4` |
+| [#2](https://github.com/ravindu57/ml_ops/actions/runs/37416628924) | staging | `96696f3393a6d94cf7944ba50c1fd8423e430d56` | `sha-96696f3393a6d94cf7944ba50c1fd8423e430d56` | `sha256:9d3e41cb34562daa6fa18fdc52346a3c19515cd72f0a37d5d92d03fce8024033` | build ✅ · load_test ✅ · **release ⏭️ skipped** |
+
+Per-step results came from the public Actions API (`/actions/runs/<id>/jobs`); every build step
+(checkout, lowercase name, QEMU, Buildx, GHCR login, build-push, digest output), every `load_test`
+step (smoke, headless gate, report upload, logs, cleanup) and the `release` bundle steps on `main`
+reported `success`. On `staging` the `Approved release bundle` job reported `skipped`, which is the
+release-skip evidence: `if: github.ref == 'refs/heads/main'` held even though `build` and `load_test`
+ran to completion.
+
+### Cross-group handover, executed for real
+
+The published digest was pulled **anonymously**, with no credentials of the publisher, and served a
+valid prediction:
+
+```bash
+docker pull ghcr.io/ravindu57/ml_ops@sha256:377a2f8aee92c3b28e9d3ca10e6b3fa442a27faf533a6c6d03ca2f7ad2bc6132
+# Status: Image is up to date for ghcr.io/ravindu57/ml_ops@sha256:377a2f8a...
+docker run -d --name iris-share -p 127.0.0.1:5000:5000 ghcr.io/ravindu57/ml_ops@sha256:377a2f8a...
+docker ps --filter name=iris-share
+# iris-share | 377a2f8aee92e | Up 6 seconds | 127.0.0.1:5000->5000/tcp
+curl -s http://127.0.0.1:5000/
+# {"service":"iris-prediction","usage":"POST /predict with four measurements (release B)"}
+curl -i -X POST http://127.0.0.1:5000/predict -H 'Content-Type: application/json' -d '{"measurements":[5.1,3.5,1.4,0.2]}'
+# HTTP/1.1 200 OK
+# {"prediction":"setosa"}
+python scripts/smoke.py http://127.0.0.1:5000
+# SMOKE PASSED: 3/3 checks against http://127.0.0.1:5000
+```
+
+No rebuild, no local build context and no `latest` tag were involved. Note that
+`ghcr.io/v2/ravindu57/ml_ops/tags/list` answers `401 authentication required` even for a publicly
+pullable package, so do not use that endpoint to test visibility — use `docker pull` instead.
+
+### Branch history
 
 | Commit | Branch | What it contains |
 | --- | --- | --- |
 | `b37dd9a` | main | `app.py`, `train.py`, `requirements.txt`, `Dockerfile`, `.dockerignore`, `.gitignore`, handout material |
 | `2eca2b9` | main | `ML Delivery` workflow — `build` job only (Practical A) |
 | `a8cacb8` | staging | `scripts/smoke.py`, `locustfile.py`, `load_test` job (Practical B) |
-| `80b39e1` | staging | `compose.yaml`, `release` job with `production` environment (Practical C) |
+| `80b39e1` | staging → `release-a` | `compose.yaml`, `release` job with `production` environment (Practical C) |
 | `4ee87db` | main ← staging | merge "approve release A after load gate" |
 | `96696f3` | staging | `app.py` home usage message marked as release B (only line changed) |
 | `e0e9ca3` | main ← staging | merge "approve release B" |
-| `18d52e2` | main | `EVIDENCE.md` (documentation only; pushing it re-runs the whole pipeline and produces one more digest) |
+| `18d52e2`, `74a054a`, `e1efeae` | main | `EVIDENCE.md` documentation commits; the last one is the SHA that produced the published main digest |
+
+`release-a` points at `80b39e1`, the last state whose `app.py` still carries the **original** usage
+message. Running `ML Delivery` manually on that branch publishes a second digest whose `/` response
+differs from the current one, which is the "old digest still returns the old message" demonstration.
 
 Verified: `train.py` is byte-identical to `original_project/train.py`; `app.py` differs from the
 original on exactly one line (the `usage` string), and `service` stays `iris-prediction`.
@@ -94,6 +137,29 @@ Two smaller faults worth recording:
 * `cp: cannot stat 'compose.yaml'` when rehearsing the release bundle — the command was executed
   from the parent `week 11` folder instead of the project root. Fix: always run bundle steps with
   the project directory as the working directory; the workflow's `actions/checkout` step guarantees this.
+
+### A3b Two deployment errors diagnosed against the published digest
+
+**1. Port already allocated.** Starting the digest-pinned container failed:
+
+```
+docker: Error response from daemon: failed to set up container networking:
+Bind for 127.0.0.1:5000 failed: port is already allocated
+```
+
+Evidence: `docker ps -a --filter label=com.docker.compose.project` still showed the `iris` container
+of the `iris-classroom` project from the C-section rollback rehearsal. The requests that appeared to
+succeed at that moment were answered by the compose stack, not by the new container — a silent
+wrong-source trap. Fix: `docker compose --env-file release.env -p iris-classroom down` before
+starting a standalone container, or put the release on another port with `HOST_PORT=5001`. The
+smoke script was also the useful signal here: pointed at nothing it printed
+`FAIL home identity: service not ready after 30 attempts: GET / could not reach the service: [Errno 111] Connection refused`
+instead of a false pass.
+
+**2. Container name already in use.** The next attempt failed with
+`Conflict. The container name "/iris-share" is already in use`, because the failed run had left a
+created-but-not-started container behind. Fix: `docker rm -f iris-share` before re-running; inspect
+`docker ps -a`, not `docker ps`, when a container is "missing".
 
 ### A4 Handover to another group
 
@@ -253,6 +319,21 @@ Ports `127.0.0.1:${HOST_PORT:-5000}:5000`, `restart: unless-stopped`, no `build:
 the staging image is never silently substituted because `release` receives `needs.build.outputs.image_ref`
 from the main-branch run itself.
 
+**Finding: the environment name alone did not create a human gate.** Run #1 on `main` shows the
+`Approved release bundle` job completing with `success` and no wait, because the `production`
+environment did not exist beforehand — GitHub created it implicitly when the job first referenced
+it, with **no required reviewers**, so nothing waited for a person. This is exactly the README's
+"naming an environment does not require a human by itself". To get a real approval wait:
+
+1. Repository **Settings → Environments → `production`** (now present) → **Required reviewers** →
+   add an eligible collaborator → tick **Prevent self-review** → **Deployment branches and tags** →
+   add `main`.
+2. Re-run `ML Delivery` on `main`. The `Approved release bundle` job then shows *Waiting for approval*
+   and only proceeds after that reviewer accepts.
+
+Until that is configured, the merge to `main` is the only human decision actually being enforced,
+and any claim of an enforced approval wait would be false.
+
 ### Multi-platform leg verified locally
 
 The `linux/arm64` platform that the workflow publishes was built and run on this machine, so a
@@ -350,17 +431,44 @@ This single-container replacement briefly interrupts service; it is not a zero-d
 
 ## Remaining steps that require your GitHub account
 
-Nothing has been pushed; the local repo is ready.
+Everything below is a click in the GitHub UI, or a name you have to supply.
 
-1. `git push -u origin main` then `git push -u origin staging`.
-2. Repository **Settings → Environments → New environment**: name `production`, add an eligible
-   collaborator as *Required reviewer*, enable **Prevent self-review**, restrict to `main`.
-3. After the first successful run, open your Packages page → the `ml_ops` container → **Change
-   visibility → Public** (package visibility is separate from repository visibility; it starts private).
-4. Confirm **Run Tests**: this repository was empty, so no such workflow exists yet. The README
-   refers to a workflow kept from last week; create or import it separately if your group expects
-   it. `ML Delivery` is deliberately a separate workflow and was not merged into it.
-5. Record the run links, source SHAs, tags and digests for versions A and B in the tables above.
-6. Get another group's name and their `docker pull`, `docker ps`, `docker logs` and prediction
-   evidence for A3.
-7. After the final deployment evidence: `docker compose --env-file release.env -p iris-classroom down`.
+1. **Add the approval gate.** Settings → Environments → `production` → Required reviewers (a
+   collaborator who is not you) → enable **Prevent self-review** → Deployment branches: `main`.
+   Then re-run `ML Delivery` on `main` and confirm the release job shows *Waiting for approval*.
+   Until then, use a recorded external review (reviewer, commit, digest, decision, reason).
+2. **Publish the Version-A digest.** Actions → **ML Delivery** → **Run workflow** → branch
+   `release-a` → Run. Record the resulting digest next to the Version-B digest above, then pull
+   both and show that the older digest still answers with the original usage message:
+   ```bash
+   docker pull ghcr.io/ravindu57/ml_ops@sha256:<VERSION_A_DIGEST>
+   docker run -d --name iris-share-a -p 127.0.0.1:5010:5000 ghcr.io/ravindu57/ml_ops@sha256:<VERSION_A_DIGEST>
+   curl http://127.0.0.1:5010/     # original usage message
+   ```
+   Also verify the package is genuinely public in the container package settings
+   (`https://github.com/users/ravindu57/packages/container/ml_ops` → Change visibility). The
+   anonymous pulls above already succeed, so the repository's public visibility was inherited by
+   the package; confirm it in the settings rather than assuming.
+3. **Download the approved bundle** from run #1
+   (`approved-release-e1efeae2507e96265053689f3e579bbcf566fde4`), extract it into `release-A/`,
+   put the Version-A digest in `release.env`, then:
+   ```bash
+   docker rm -f iris-share          # free 127.0.0.1:5000 first
+   docker compose --env-file release.env -p iris-classroom config
+   docker compose --env-file release.env -p iris-classroom pull
+   docker compose --env-file release.env -p iris-classroom up -d --force-recreate
+   python3 smoke.py http://127.0.0.1:5000 && curl http://127.0.0.1:5000/
+   ```
+   Rollback = enter `release-A/` again and repeat `pull` + `up` with the same `-p iris-classroom`.
+4. **Collect the other group's evidence**: their group name plus `docker pull`, `docker ps`,
+   `docker logs` and a successful `POST /predict` using one of the digests above.
+5. **Run Tests**: this repository was empty, so no such workflow exists. The README refers to a
+   workflow kept from last week; import or create it separately if your group expects it. `ML
+   Delivery` is deliberately a separate workflow and was never folded into it.
+6. **Cleanup** after the final deployment evidence:
+   ```bash
+   docker rm -f iris-share
+   docker compose --env-file release.env -p iris-classroom down
+   ```
+   Keep the retained bundles (`release-A/`, `release-B/`) and `reports/` for submission; do not
+   delete images before the evidence has been reviewed.
