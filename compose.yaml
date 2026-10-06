@@ -1,0 +1,9 @@
+# Deploys one published, digest-pinned image. No local build: the artefact is
+# exactly what the pipeline built, smoke-tested and load-tested.
+services:
+  iris:
+    image: ${IMAGE_REF:?IMAGE_REF is required, for example ghcr.io/owner/repo@sha256:...}
+    container_name: iris
+    ports:
+      - "127.0.0.1:${HOST_PORT:-5000}:5000"
+    restart: unless-stopped

@@ -148,3 +148,44 @@ jobs:
       - name: Remove staging container
         if: always()
         run: docker rm -f iris-staging || true
+
+  release:
+    name: Approved release bundle
+    needs: [build, load_test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment: production
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Summarise approved release
+        env:
+          IMAGE_REF: ${{ needs.build.outputs.image_ref }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          echo "Approved release of ${IMAGE_REF} from ${SOURCE_SHA}"
+
+      - name: Prepare approved release bundle
+        env:
+          IMAGE_REF: ${{ needs.build.outputs.image_ref }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp compose.yaml release/compose.yaml
+          cp scripts/smoke.py release/smoke.py
+          printf 'IMAGE_REF=%s\nHOST_PORT=5000\n' "$IMAGE_REF" > release/release.env
+          printf '%s\n' "$SOURCE_SHA" > release/source-commit.txt
+          ls -l release
+
+      - name: Upload approved-release-${{ needs.build.outputs.source_sha }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-release-${{ needs.build.outputs.source_sha }}
+          path: release/
+          if-no-files-found: error
